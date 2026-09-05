@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #f3eee4;
+  --ink: #1c1917;
+  --muted: #57534e;
+  --line: #e4dcd0;
+  --card: #fffdf8;
+  --accent: #9a3412;
+  --accent-dark: #7c2d12;
+  --good: #14532d;
+  --warn: #92400e;
+  --bad: #9f1239;
+  --chip: #efe6d8;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-card: var(--card);
+  --color-accent: var(--accent);
+  --color-accent-dark: var(--accent-dark);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+  --color-chip: var(--chip);
+  --font-sans: var(--font-geist-sans);
+  --font-serif: var(--font-newsreader);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+::selection {
+  background: #e8c4b0;
+}
+
+.rule {
+  background: repeating-linear-gradient(
+    -12deg,
+    transparent,
+    transparent 10px,
+    rgba(28, 25, 23, 0.04) 10px,
+    rgba(28, 25, 23, 0.04) 11px
+  );
+}
