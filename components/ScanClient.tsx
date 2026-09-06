@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
+import { capture } from "@/lib/analytics";
 import { ResumePreview } from "@/components/ResumePreview";
 import { PORTALS } from "@/lib/lexicon";
 import { MONTHLY_PRICE_RUPEES, REWRITE_PRICE_RUPEES } from "@/lib/pricing";
@@ -66,6 +67,11 @@ export function ScanClient({
   }, [authStatus]);
 
   useEffect(() => {
+    if (!preferMonthly) return;
+    capture("scan_monthly_intent");
+  }, [preferMonthly]);
+
+  useEffect(() => {
     if (!autoSample) return;
     setJd(SAMPLE_JD);
     setResumeText(SAMPLE_RESUME_TEXT);
@@ -84,6 +90,11 @@ export function ScanClient({
     const resumeValue = opts?.resume ?? resumeText;
     setLoading(true);
     setError(null);
+    capture("scan_started", {
+      portal,
+      sample: asSample,
+      has_file: Boolean(file && !asSample),
+    });
     try {
       const form = new FormData();
       form.set("portal", portal);
@@ -100,7 +111,17 @@ export function ScanClient({
       setEditing(false);
       setPayment(null);
       setTab("issues");
+      capture("scan_completed", {
+        portal: next.portal,
+        sample: asSample,
+        score: next.score,
+        rewrite_score: next.rewriteScore,
+        file_type: next.layout.fileType,
+        columns: next.layout.columnCount,
+        blockers: next.issues.filter((issue) => issue.severity === "blocker").length,
+      });
     } catch (err) {
+      capture("scan_failed", { portal, sample: asSample });
       setError(err instanceof Error ? err.message : "Scan failed");
     } finally {
       setLoading(false);
@@ -127,8 +148,16 @@ export function ScanClient({
     try {
       let receipt = payment;
       if (!receipt && !subscribed && payConfigured) {
-        receipt = await collectRazorpayPayment();
+        capture("pay_checkout_opened", { format, kind: "one_time" });
+        try {
+          receipt = await collectRazorpayPayment();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Export failed";
+          if (message === "Payment cancelled.") capture("pay_cancelled", { format, kind: "one_time" });
+          throw err;
+        }
         setPayment(receipt);
+        capture("pay_completed", { format, kind: "one_time" });
       }
       const response = await fetch("/api/download", {
         method: "POST",
@@ -146,6 +175,10 @@ export function ScanClient({
       a.download = `${rewrite.name.replace(/\s+/g, "_")}_ATSDekho.${format}`;
       a.click();
       URL.revokeObjectURL(url);
+      capture("download_completed", {
+        format,
+        paid_via: subscribed ? "subscription" : payConfigured ? "one_time" : "free",
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Export failed";
       if (message !== "Payment cancelled.") setError(message);
@@ -156,16 +189,20 @@ export function ScanClient({
 
   async function subscribeMonthly() {
     if (!signedInEmail) {
+      capture("google_signin_clicked", { from: "subscribe" });
       void signIn("google", { callbackUrl: window.location.href });
       return;
     }
     setSubscribing(true);
     setError(null);
+    capture("pay_checkout_opened", { kind: "subscription" });
     try {
       await collectRazorpaySubscription(signedInEmail);
       setSubscribed(true);
+      capture("pay_completed", { kind: "subscription" });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not start the monthly plan.";
+      if (message === "Payment cancelled.") capture("pay_cancelled", { kind: "subscription" });
       if (message !== "Payment cancelled.") setError(message);
     } finally {
       setSubscribing(false);

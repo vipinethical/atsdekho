@@ -1,6 +1,7 @@
 "use client";
 
 import { signIn, signOut, useSession } from "next-auth/react";
+import { capture } from "@/lib/analytics";
 
 export function AuthButtons() {
   const { data, status } = useSession();
@@ -13,7 +14,10 @@ export function AuthButtons() {
         <span className="hidden max-w-[10rem] truncate text-sm text-muted sm:inline">{data.user.email}</span>
         <button
           type="button"
-          onClick={() => void signOut()}
+          onClick={() => {
+            capture("google_signout_clicked");
+            void signOut();
+          }}
           className="text-sm text-muted hover:text-ink"
         >
           Sign out
@@ -24,7 +28,10 @@ export function AuthButtons() {
   return (
     <button
       type="button"
-      onClick={() => void signIn("google", { callbackUrl: "/scan?plan=monthly" })}
+      onClick={() => {
+        capture("google_signin_clicked");
+        void signIn("google", { callbackUrl: "/scan?plan=monthly" });
+      }}
       className="text-sm text-muted hover:text-ink"
     >
       Sign in with Google
