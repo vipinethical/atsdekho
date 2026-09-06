@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Newsreader } from "next/font/google";
+import { AuthProvider } from "@/components/AuthProvider";
 import { defaultDescription, defaultTitle, getSiteUrl, siteName } from "@/lib/site";
 import "./globals.css";
 
@@ -71,7 +72,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en-IN"
       className={`${geistSans.variable} ${newsreader.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans text-ink">{children}</body>
+      <body className="min-h-full flex flex-col font-sans text-ink">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

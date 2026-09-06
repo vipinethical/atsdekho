@@ -28,6 +28,6 @@ export const faqs = [
   },
   {
     q: "What do you charge?",
-    a: "₹199 for one resume rewrite, or ₹499/month if you are applying every week. Students and switchers already pay agencies more than that for a Cosmic-sans PDF that Naukri cannot parse.",
+    a: "₹199 once on download, or sign in with Google and pay ₹499/month for unlimited rewrites on that account. We look up the plan in Razorpay against your Google email. Cancel in Razorpay.",
   },
 ];

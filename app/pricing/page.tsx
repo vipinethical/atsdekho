@@ -39,7 +39,7 @@ export default function PricingPage() {
           <article className="border border-line bg-card p-8">
             <h2 className="font-serif text-3xl">One resume</h2>
             <p className="mt-4 font-serif text-5xl">₹199</p>
-            <p className="mt-1 text-sm text-muted">incl. GST when we turn payments on</p>
+            <p className="mt-1 text-sm text-muted">UPI, cards, netbanking via Razorpay</p>
             <ul className="mt-6 space-y-2 text-sm leading-6 text-muted">
               <li>Parser view for Naukri, IIMJobs, or LinkedIn</li>
               <li>JD keyword match without fake skills</li>
@@ -62,17 +62,18 @@ export default function PricingPage() {
               <li>Built for campus + 2–8 year switchers</li>
             </ul>
             <a
-              href="/scan"
+              href="/scan?plan=monthly"
               className="mt-8 inline-block rounded-full bg-paper px-5 py-2.5 text-sm text-ink"
             >
-              Start with a scan
+              Scan, then start ₹499/month
             </a>
           </article>
         </div>
         <p className="mt-10 max-w-2xl text-sm leading-6 text-muted">
-          Razorpay checkout is the next wiring step. This build unlocks the
-          rewrite after the scan so you can sell from WhatsApp and college
-          groups this week, then drop in a key.
+          Checkout is Razorpay: UPI first, then cards and netbanking. You scan for free. ₹199
+          unlocks Word and PDF for that rewrite. ₹499/month needs Google sign-in — the plan sits
+          on that Gmail, so the next laptop still sees it. Recurring charges usually need a card
+          or UPI Autopay.
         </p>
       </main>
       <SiteFooter />

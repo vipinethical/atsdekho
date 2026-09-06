@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AuthButtons } from "@/components/AuthButtons";
 
 export function SiteHeader() {
   return (
@@ -17,6 +18,7 @@ export function SiteHeader() {
           <Link href="/pricing" className="text-muted hover:text-ink">
             Pricing
           </Link>
+          <AuthButtons />
           <Link
             href="/scan"
             className="rounded-full bg-accent px-4 py-2 text-sm text-white hover:bg-accent-dark"

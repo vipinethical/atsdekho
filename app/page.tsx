@@ -180,6 +180,7 @@ SOFTWARE ENGINEER Spring Boot
                 One rewrite
               </dt>
               <dd className="mt-2 font-serif text-4xl">₹199</dd>
+              <p className="mt-2 text-sm text-muted">UPI, cards, netbanking</p>
             </div>
             <div className="border border-line bg-card p-6">
               <dt className="text-xs uppercase tracking-[0.18em] text-muted">

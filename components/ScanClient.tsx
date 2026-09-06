@@ -1,8 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { signIn, useSession } from "next-auth/react";
 import { ResumePreview } from "@/components/ResumePreview";
 import { PORTALS } from "@/lib/lexicon";
+import { MONTHLY_PRICE_RUPEES, REWRITE_PRICE_RUPEES } from "@/lib/pricing";
+import {
+  collectRazorpayPayment,
+  collectRazorpaySubscription,
+  type PaymentReceipt,
+} from "@/lib/razorpay-checkout";
 import { cloneRewrite, sanitizeRewrite } from "@/lib/resume-format";
 import { SAMPLE_JD, SAMPLE_RESUME_TEXT } from "@/lib/sample";
 import { scoreRewrite } from "@/lib/score-rewrite";
@@ -10,7 +17,14 @@ import type { AnalysisResult, Portal, RewrittenResume } from "@/lib/types";
 
 type Tab = "parser" | "match" | "issues";
 
-export function ScanClient({ autoSample }: { autoSample: boolean }) {
+export function ScanClient({
+  autoSample,
+  preferMonthly = false,
+}: {
+  autoSample: boolean;
+  preferMonthly?: boolean;
+}) {
+  const { data: session, status: authStatus } = useSession();
   const [portal, setPortal] = useState<Portal>("naukri");
   const [jd, setJd] = useState("");
   const [resumeText, setResumeText] = useState("");
@@ -23,6 +37,33 @@ export function ScanClient({ autoSample }: { autoSample: boolean }) {
   const [editing, setEditing] = useState(false);
   const [tab, setTab] = useState<Tab>("parser");
   const [downloading, setDownloading] = useState<"docx" | "pdf" | null>(null);
+  const [payment, setPayment] = useState<PaymentReceipt | null>(null);
+  const [payConfigured, setPayConfigured] = useState(false);
+  const [googleAuth, setGoogleAuth] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const signedInEmail = session?.user?.email?.trim().toLowerCase() ?? "";
+
+  useEffect(() => {
+    void fetch("/api/pay/config")
+      .then((res) => res.json())
+      .then((data: { configured?: boolean; required?: boolean; googleAuth?: boolean }) => {
+        setPayConfigured(Boolean(data.configured || data.required));
+        setGoogleAuth(Boolean(data.googleAuth));
+      })
+      .catch(() => setPayConfigured(false));
+  }, []);
+
+  useEffect(() => {
+    if (authStatus !== "authenticated") {
+      setSubscribed(false);
+      return;
+    }
+    void fetch("/api/pay/subscription")
+      .then((res) => res.json())
+      .then((data: { subscribed?: boolean }) => setSubscribed(Boolean(data.subscribed)))
+      .catch(() => setSubscribed(false));
+  }, [authStatus]);
 
   useEffect(() => {
     if (!autoSample) return;
@@ -57,6 +98,7 @@ export function ScanClient({ autoSample }: { autoSample: boolean }) {
       setResult(next);
       setDraft(cloneRewrite(next.rewrite));
       setEditing(false);
+      setPayment(null);
       setTab("issues");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Scan failed");
@@ -81,13 +123,22 @@ export function ScanClient({ autoSample }: { autoSample: boolean }) {
     const rewrite = draft ? sanitizeRewrite(draft) : result?.rewrite;
     if (!rewrite) return;
     setDownloading(format);
+    setError(null);
     try {
+      let receipt = payment;
+      if (!receipt && !subscribed && payConfigured) {
+        receipt = await collectRazorpayPayment();
+        setPayment(receipt);
+      }
       const response = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rewrite, format }),
+        body: JSON.stringify({ rewrite, format, payment: receipt }),
       });
-      if (!response.ok) throw new Error("Export failed");
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(data?.error || "Export failed");
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -96,9 +147,28 @@ export function ScanClient({ autoSample }: { autoSample: boolean }) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Export failed");
+      const message = err instanceof Error ? err.message : "Export failed";
+      if (message !== "Payment cancelled.") setError(message);
     } finally {
       setDownloading(null);
+    }
+  }
+
+  async function subscribeMonthly() {
+    if (!signedInEmail) {
+      void signIn("google", { callbackUrl: window.location.href });
+      return;
+    }
+    setSubscribing(true);
+    setError(null);
+    try {
+      await collectRazorpaySubscription(signedInEmail);
+      setSubscribed(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not start the monthly plan.";
+      if (message !== "Payment cancelled.") setError(message);
+    } finally {
+      setSubscribing(false);
     }
   }
 
@@ -219,6 +289,15 @@ export function ScanClient({ autoSample }: { autoSample: boolean }) {
             scoreTone={scoreTone}
             onDownload={download}
             downloading={downloading}
+            paid={Boolean(payment) || subscribed}
+            payConfigured={payConfigured}
+            subscriberEmail={signedInEmail}
+            subscribed={subscribed}
+            subscribing={subscribing}
+            preferMonthly={preferMonthly}
+            googleAuth={googleAuth}
+            onSubscribe={subscribeMonthly}
+            error={error}
           />
         )}
       </div>
@@ -238,6 +317,15 @@ function Results({
   scoreTone,
   onDownload,
   downloading,
+  paid,
+  payConfigured,
+  subscriberEmail,
+  subscribed,
+  subscribing,
+  preferMonthly,
+  googleAuth,
+  onSubscribe,
+  error,
 }: {
   result: AnalysisResult;
   draft: RewrittenResume;
@@ -250,6 +338,15 @@ function Results({
   scoreTone: string;
   onDownload: (format: "docx" | "pdf") => void;
   downloading: "docx" | "pdf" | null;
+  paid: boolean;
+  payConfigured: boolean;
+  subscriberEmail: string;
+  subscribed: boolean;
+  subscribing: boolean;
+  preferMonthly: boolean;
+  googleAuth: boolean;
+  onSubscribe: () => void;
+  error: string | null;
 }) {
   const tabs: { id: Tab; label: string }[] = [
     { id: "issues", label: "Issues" },
@@ -259,6 +356,7 @@ function Results({
 
   return (
     <div className="space-y-8">
+      {error ? <p className="text-sm text-bad">{error}</p> : null}
       <RewritePanel
         result={result}
         draft={draft}
@@ -268,6 +366,14 @@ function Results({
         onReset={onReset}
         onDownload={onDownload}
         downloading={downloading}
+        paid={paid}
+        payConfigured={payConfigured}
+        subscriberEmail={subscriberEmail}
+        subscribed={subscribed}
+        subscribing={subscribing}
+        preferMonthly={preferMonthly}
+        googleAuth={googleAuth}
+        onSubscribe={onSubscribe}
       />
 
       <div>
@@ -447,6 +553,14 @@ function RewritePanel({
   onReset,
   onDownload,
   downloading,
+  paid,
+  payConfigured,
+  subscriberEmail,
+  subscribed,
+  subscribing,
+  preferMonthly,
+  googleAuth,
+  onSubscribe,
 }: {
   result: AnalysisResult;
   draft: RewrittenResume;
@@ -456,6 +570,14 @@ function RewritePanel({
   onReset: () => void;
   onDownload: (format: "docx" | "pdf") => void;
   downloading: "docx" | "pdf" | null;
+  paid: boolean;
+  payConfigured: boolean;
+  subscriberEmail: string;
+  subscribed: boolean;
+  subscribing: boolean;
+  preferMonthly: boolean;
+  googleAuth: boolean;
+  onSubscribe: () => void;
 }) {
   const busy = downloading !== null;
   const dirty = JSON.stringify(draft) !== JSON.stringify(result.rewrite);
@@ -495,7 +617,11 @@ function RewritePanel({
           disabled={busy}
           className="rounded-full bg-accent px-5 py-2.5 text-sm text-white hover:bg-accent-dark disabled:opacity-60"
         >
-          {downloading === "docx" ? "Preparing Word…" : "Download Word (.docx)"}
+          {downloading === "docx"
+            ? "Preparing Word…"
+            : !paid && payConfigured
+              ? `Pay ₹${REWRITE_PRICE_RUPEES} · Word`
+              : "Download Word (.docx)"}
         </button>
         <button
           type="button"
@@ -503,7 +629,11 @@ function RewritePanel({
           disabled={busy}
           className="rounded-full border border-ink/20 bg-card px-5 py-2.5 text-sm hover:border-ink/50 disabled:opacity-60"
         >
-          {downloading === "pdf" ? "Preparing PDF…" : "Download PDF"}
+          {downloading === "pdf"
+            ? "Preparing PDF…"
+            : !paid && payConfigured
+              ? `Pay ₹${REWRITE_PRICE_RUPEES} · PDF`
+              : "Download PDF"}
         </button>
         <button
           type="button"
@@ -524,9 +654,42 @@ function RewritePanel({
         <p className="text-sm text-muted">
           {editing
             ? "Downloads use the text on this page."
-            : ".docx for Naukri · PDF for email / LinkedIn"}
+            : subscribed
+              ? `₹${MONTHLY_PRICE_RUPEES}/mo on ${subscriberEmail} · Word and PDF unlocked`
+              : paid
+                ? "Paid · .docx for Naukri · PDF for email / LinkedIn"
+                : payConfigured
+                  ? `₹${REWRITE_PRICE_RUPEES} this rewrite, or ₹${MONTHLY_PRICE_RUPEES}/month unlimited.`
+                  : ".docx for Naukri · PDF for email / LinkedIn"}
         </p>
       </div>
+      {payConfigured && !subscribed ? (
+        <div className="flex flex-wrap items-center gap-3 border border-line bg-card px-4 py-3">
+          <p className="flex-1 text-sm text-muted">
+            {subscriberEmail
+              ? `₹${MONTHLY_PRICE_RUPEES}/month unlimited on ${subscriberEmail}`
+              : googleAuth
+                ? `Sign in with Google, then ₹${MONTHLY_PRICE_RUPEES}/month unlocks every rewrite on that account.`
+                : `Add Google login keys to offer ₹${MONTHLY_PRICE_RUPEES}/month.`}
+          </p>
+          <button
+            type="button"
+            onClick={onSubscribe}
+            disabled={subscribing || busy || (!subscriberEmail && !googleAuth)}
+            className={`rounded-full px-5 py-2.5 text-sm disabled:opacity-60 ${
+              preferMonthly
+                ? "bg-ink text-paper"
+                : "border border-ink/20 bg-card hover:border-ink/50"
+            }`}
+          >
+            {subscribing
+              ? "Opening Razorpay…"
+              : subscriberEmail
+                ? `Start ₹${MONTHLY_PRICE_RUPEES}/month`
+                : "Sign in with Google"}
+          </button>
+        </div>
+      ) : null}
       <p className="text-sm leading-6 text-muted">
         Single column, standard headings, contact in the body. Upload the .docx to Naukri; use PDF
         when a recruiter asks for it.

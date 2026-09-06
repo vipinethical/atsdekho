@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 export default async function ScanPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sample?: string }>;
+  searchParams: Promise<{ sample?: string; plan?: string }>;
 }) {
   const params = await searchParams;
   return (
@@ -42,7 +42,7 @@ export default async function ScanPage({
           Pick the portal you are applying on. We score the file the way that
           parser reads — not the way it looks in Word.
         </p>
-        <ScanClient autoSample={params.sample === "1"} />
+        <ScanClient autoSample={params.sample === "1"} preferMonthly={params.plan === "monthly"} />
       </main>
       <SiteFooter />
     </div>
